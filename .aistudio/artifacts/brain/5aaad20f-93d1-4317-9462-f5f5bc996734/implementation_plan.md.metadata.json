@@ -1,0 +1,6 @@
+{
+  "summary": "Plan de implementación para la plataforma de análisis y telemetría de carreras y entrenamientos Garmin (Garmin Connect API, OAuth 2.0, importación de archivos FIT/GPX, predictores de carrera, zonas de FC, métricas de recuperación y visor GPS sincronizado) con estética minimalista, clara y técnica.",
+  "updatedAt": "2026-11-06T11:33:09.792902877Z",
+  "requestFeedback": true,
+  "userFacing": true
+}
