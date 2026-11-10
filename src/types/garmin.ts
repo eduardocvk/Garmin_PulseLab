@@ -100,6 +100,10 @@ export interface RacePrediction {
 
 export interface GarminApiConfig {
   isConnected: boolean;
+  connectionType?: 'personal_key' | 'oauth_client' | 'files_only';
+  personalApiKey?: string;
+  personalApiKeyCreatedAt?: string;
+  personalApiKeyExpiresAt?: string;
   clientId: string;
   clientSecret: string;
   redirectUri: string;

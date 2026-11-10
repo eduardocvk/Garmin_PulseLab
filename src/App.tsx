@@ -18,6 +18,7 @@ import {
   initialGarminConfig 
 } from './data/mockGarminData';
 import { GarminActivity, GarminApiConfig } from './types/garmin';
+import { syncGarminPersonalApi } from './services/garminApiService';
 import { CheckCircle2, Sparkles, X } from 'lucide-react';
 
 export default function App() {
@@ -51,17 +52,41 @@ export default function App() {
     showToast(`Actividad "${newActivity.title}" importada y analizada correctamente.`);
   };
 
-  const handleSyncNow = () => {
+  const handleActivitiesSynced = (newActivities: GarminActivity[]) => {
+    setActivities(prev => {
+      // Filtrar duplicados por ID
+      const existingIds = new Set(prev.map(a => a.id));
+      const fresh = newActivities.filter(a => !existingIds.has(a.id));
+      return [...fresh, ...prev];
+    });
+    if (newActivities.length > 0) {
+      setSelectedActivityId(newActivities[0].id);
+    }
+    showToast(`¡${newActivities.length} actividades de Garmin sincronizadas e integradas en tus métricas!`);
+  };
+
+  const handleSyncNow = async () => {
     setIsSyncing(true);
-    setTimeout(() => {
+    const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+
+    if (garminConfig.personalApiKey) {
+      const result = await syncGarminPersonalApi(garminConfig.personalApiKey, true);
       setIsSyncing(false);
-      const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
-      setGarminConfig(prev => ({
-        ...prev,
-        lastSyncTime: nowStr
-      }));
-      showToast('Sincronización con Garmin Connect completada. 6 actividades al día.');
-    }, 1200);
+
+      setGarminConfig(prev => ({ ...prev, lastSyncTime: nowStr }));
+
+      if (result.success && result.activities.length > 0) {
+        handleActivitiesSynced(result.activities);
+      } else {
+        showToast(result.message);
+      }
+    } else {
+      setTimeout(() => {
+        setIsSyncing(false);
+        setGarminConfig(prev => ({ ...prev, lastSyncTime: nowStr }));
+        showToast('Sincronización completada. Configura tu Clave API personal para datos en vivo.');
+      }, 1000);
+    }
   };
 
   // Simula el push de webhook cuando el usuario termina una carrera en el reloj
@@ -182,7 +207,8 @@ export default function App() {
             config={garminConfig}
             onUpdateConfig={handleUpdateConfig}
             onSimulateWebhook={handleSimulateWebhook}
-            onSyncActivities={handleSyncNow}
+            onActivitiesSynced={handleActivitiesSynced}
+            onOpenImportModal={() => setIsImportModalOpen(true)}
             isSyncing={isSyncing}
           />
         )}
