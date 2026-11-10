@@ -2,5 +2,7 @@
   "name": "Garmin PulseLab - Running Analytics",
   "description": "Plataforma analítica y de telemetría para corredores y entrenamientos Garmin con integración API, visor GPS, zonas cardíacas y predicción de marcas.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
