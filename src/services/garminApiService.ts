@@ -32,11 +32,11 @@ export interface SyncResult {
   success: boolean;
   activities: GarminActivity[];
   message: string;
-  corsBlocked?: boolean;
+  details?: string;
 }
 
 /**
- * Convierte una actividad en formato crudo de Garmin Connect a nuestro modelo GarminActivity
+ * Convierte actividades de Garmin a formato GarminActivity
  */
 export function mapGarminRawToActivity(raw: GarminRawActivity, index: number): GarminActivity {
   const dist = raw.distance || 10000;
@@ -56,7 +56,6 @@ export function mapGarminRawToActivity(raw: GarminRawActivity, index: number): G
   const maxHR = Math.round(raw.maxHR || (avgHR + 18));
   const avgCad = Math.round(raw.averageRunningCadenceInStepsPerMinute || 178);
 
-  // Generar laps estimados
   const kmCount = Math.max(1, Math.floor(dist / 1000));
   const laps: ActivityLap[] = [];
   for (let k = 1; k <= kmCount; k++) {
@@ -73,7 +72,6 @@ export function mapGarminRawToActivity(raw: GarminRawActivity, index: number): G
     });
   }
 
-  // Generar telemetría sintética basada en las estadísticas reales para permitir visualización en mapa y curvas
   const pointsCount = 60;
   const telemetry: TelemetryPoint[] = [];
   const distPerPoint = dist / pointsCount;
@@ -128,96 +126,77 @@ export function mapGarminRawToActivity(raw: GarminRawActivity, index: number): G
 }
 
 /**
- * Ejecuta la sincronización con Garmin Connect Personal API
+ * Sincroniza con Garmin a través del endpoint backend para eliminar CORS por completo
  */
-export async function syncGarminPersonalApi(apiKey: string, useProxy: boolean = true): Promise<SyncResult> {
+export async function syncGarminPersonalApi(apiKey: string): Promise<SyncResult> {
   const cleanKey = apiKey.trim();
   if (!cleanKey) {
     return { success: false, activities: [], message: 'Por favor introduce tu Clave API personal de Garmin.' };
   }
 
-  // 1. Intentar obtener el token de acceso
-  const tokenUrl = 'https://personal.connectapi.garmin.com/personalapitoken-service/personal-api/personal-api-key/token';
-  const activitiesUrl = 'https://personal.connectapi.garmin.com/activitylist-service/activities/search/activities?limit=10';
+  // Lista de endpoints proxy (local y nube de AI Studio)
+  const proxyEndpoints = [
+    '/api/garmin/sync',
+    'https://ais-dev-h2mwg7dnsvezr4opb4s6f6-502424755260.europe-west2.run.app/api/garmin/sync'
+  ];
 
-  try {
-    let targetUrl = tokenUrl;
-    if (useProxy) {
-      targetUrl = `https://corsproxy.io/?url=${encodeURIComponent(tokenUrl)}`;
-    }
+  let lastError = '';
 
-    const tokenResponse = await fetch(targetUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `ApiKey ${cleanKey}`,
-        'Content-Type': 'application/json'
+  for (const endpoint of proxyEndpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ apiKey: cleanKey })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const msg = errorData.error || `HTTP ${response.status}: Error en servidor de sincronización`;
+        lastError = msg;
+        // Si fue 401 o 403, es error de clave de Garmin
+        if (response.status === 401 || response.status === 403) {
+          return {
+            success: false,
+            activities: [],
+            message: `Garmin Connect rechazó la clave API: ${msg}. Comprueba que la clave en Garmin Connect esté activa y no haya expirado.`
+          };
+        }
+        continue;
       }
-    });
 
-    if (!tokenResponse.ok) {
-      // Si la API de Garmin devuelve error de clave
-      if (tokenResponse.status === 401 || tokenResponse.status === 403) {
+      const data = await response.json();
+      if (!data.success) {
+        lastError = data.error || 'Error al procesar actividades de Garmin';
+        continue;
+      }
+
+      const rawActivities = data.activities;
+      if (!Array.isArray(rawActivities) || rawActivities.length === 0) {
         return {
-          success: false,
+          success: true,
           activities: [],
-          message: 'Garmin denegó el acceso (401/403). Verifica que la clave API personal copiada esté activa y no haya sido revocada.'
+          message: 'Conexión con Garmin completada con éxito. No se encontraron nuevas actividades en tu cuenta.'
         };
       }
-      throw new Error(`Garmin API respondió con código HTTP ${tokenResponse.status}`);
-    }
 
-    const tokenData = await tokenResponse.json();
-    const accessToken = tokenData.accessToken || tokenData.token;
+      const parsedActivities = rawActivities.map((r, i) => mapGarminRawToActivity(r, i));
 
-    if (!accessToken) {
-      throw new Error('Garmin no devolvió un accessToken válido en la respuesta.');
-    }
-
-    // 2. Con el access token, solicitar las actividades
-    let actFetchUrl = activitiesUrl;
-    if (useProxy) {
-      actFetchUrl = `https://corsproxy.io/?url=${encodeURIComponent(activitiesUrl)}`;
-    }
-
-    const actResponse = await fetch(actFetchUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!actResponse.ok) {
-      throw new Error(`Error al descargar actividades: HTTP ${actResponse.status}`);
-    }
-
-    const rawActivities: GarminRawActivity[] = await actResponse.json();
-    if (!Array.isArray(rawActivities) || rawActivities.length === 0) {
       return {
         success: true,
-        activities: [],
-        message: 'Conexión con Garmin completada con éxito, pero no se encontraron actividades recientes en este rango.'
+        activities: parsedActivities,
+        message: `¡Sincronización con Garmin Connect completada! Se descargaron ${parsedActivities.length} carreras reales de tu cuenta.`
       };
+    } catch (err: any) {
+      lastError = err.message || 'Error de conexión';
     }
-
-    const parsedActivities = rawActivities.map((r, i) => mapGarminRawToActivity(r, i));
-
-    return {
-      success: true,
-      activities: parsedActivities,
-      message: `¡Sincronización completada! Se descargaron ${parsedActivities.length} actividades reales desde Garmin Connect.`
-    };
-  } catch (err: any) {
-    const errorText = err.message || '';
-    const isCors = errorText.toLowerCase().includes('failed to fetch') || errorText.toLowerCase().includes('networkerror');
-
-    return {
-      success: false,
-      activities: [],
-      corsBlocked: isCors,
-      message: isCors
-        ? 'Restricción de navegador (CORS): Los servidores de Garmin impiden peticiones directas desde páginas web. Te recomendamos descargar el archivo GPX/FIT de Garmin Connect y arrastrarlo, o activar el proxy seguro.'
-        : `Error conectando con Garmin Connect: ${errorText}`
-    };
   }
+
+  return {
+    success: false,
+    activities: [],
+    message: `No se pudo conectar con el servicio de sincronización: ${lastError}`
+  };
 }

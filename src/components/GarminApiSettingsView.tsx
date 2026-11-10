@@ -45,7 +45,6 @@ export const GarminApiSettingsView: React.FC<GarminApiSettingsViewProps> = ({
   const [activeMode, setActiveMode] = useState<'personal_key' | 'oauth_developer'>('personal_key');
   const [personalApiKey, setPersonalApiKey] = useState(config.personalApiKey || config.clientSecret || '');
   const [showKey, setShowKey] = useState(false);
-  const [useProxy, setUseProxy] = useState(true);
 
   const [isSyncingLocal, setIsSyncingLocal] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<{
@@ -67,11 +66,11 @@ export const GarminApiSettingsView: React.FC<GarminApiSettingsViewProps> = ({
     setIsSyncingLocal(true);
     setSyncFeedback({
       type: 'info',
-      message: 'Conectando con los servidores oficiales de Garmin Connect...'
+      message: 'Conectando con Garmin Connect mediante servidor de enlace seguro...'
     });
 
     try {
-      const result = await syncGarminPersonalApi(personalApiKey.trim(), useProxy);
+      const result = await syncGarminPersonalApi(personalApiKey.trim());
       if (result.success) {
         onUpdateConfig({
           personalApiKey: personalApiKey.trim(),
@@ -95,7 +94,7 @@ export const GarminApiSettingsView: React.FC<GarminApiSettingsViewProps> = ({
     } catch (err: any) {
       setSyncFeedback({
         type: 'error',
-        message: 'Error inesperado: ' + (err.message || 'No se pudo completar la sincronización.')
+        message: 'Error de conexión: ' + (err.message || 'No se pudo completar la sincronización.')
       });
     } finally {
       setIsSyncingLocal(false);
@@ -198,17 +197,8 @@ export const GarminApiSettingsView: React.FC<GarminApiSettingsViewProps> = ({
 
               {/* Botón de Sincronización y Acciones */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="proxyToggle"
-                    checked={useProxy}
-                    onChange={(e) => setUseProxy(e.target.checked)}
-                    className="rounded text-blue-600 focus:ring-blue-500"
-                  />
-                  <label htmlFor="proxyToggle" className="text-xs text-slate-600 cursor-pointer">
-                    Habilitar proxy CORS seguro (recomendado para saltar bloqueos del navegador)
-                  </label>
+                <div className="text-xs text-slate-500">
+                  Enlace seguro activo mediante servidor backend de telemetría Garmin
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -219,7 +209,7 @@ export const GarminApiSettingsView: React.FC<GarminApiSettingsViewProps> = ({
                     className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                    <span>{isSyncing ? 'Sincronizando con Garmin...' : 'Sincronizar Datos Ahora'}</span>
+                    <span>{isSyncing ? 'Conectando con Garmin...' : 'Sincronizar Datos Ahora'}</span>
                   </button>
                 </div>
               </div>

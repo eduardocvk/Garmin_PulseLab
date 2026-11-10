@@ -70,7 +70,7 @@ export default function App() {
     const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
 
     if (garminConfig.personalApiKey) {
-      const result = await syncGarminPersonalApi(garminConfig.personalApiKey, true);
+      const result = await syncGarminPersonalApi(garminConfig.personalApiKey);
       setIsSyncing(false);
 
       setGarminConfig(prev => ({ ...prev, lastSyncTime: nowStr }));
